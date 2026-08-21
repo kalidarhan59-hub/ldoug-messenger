@@ -1,234 +1,278 @@
 /**
- * Chat Demo page: a warm, Swiss-influenced messenger workspace.
- * The screen intentionally contains no personal contacts or fabricated conversation messages.
+ * WhatsApp-inspired local workspace: dense three-column messenger shell.
+ * It reproduces the user-visible layout but never calls WhatsApp or sends network messages.
  */
-import { useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 import {
   Archive,
+  BellOff,
+  Camera,
+  CheckCheck,
   ChevronDown,
+  CircleUserRound,
   Clock3,
+  FileText,
+  Image,
   LockKeyhole,
   Menu,
   MessageCircleMore,
-  MoreHorizontal,
-  PanelLeft,
+  Mic,
+  MoreVertical,
+  Phone,
   Plus,
   Search,
-  Settings2,
-  ShieldCheck,
-  Sparkles,
+  SendHorizontal,
+  Settings,
+  Smile,
   UsersRound,
+  Video,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 
-type Area = "chats" | "updates" | "groups";
-
-const navigation = [
-  { id: "chats" as Area, label: "Чаты", icon: MessageCircleMore },
-  { id: "updates" as Area, label: "Обновления", icon: Clock3 },
-  { id: "groups" as Area, label: "Сообщества", icon: UsersRound },
-];
-
-const emptyCopy: Record<Area, { title: string; detail: string; action: string }> = {
-  chats: {
-    title: "Личных чатов нет",
-    detail: "В этой визуальной демо-версии контакты и переписки не загружаются.",
-    action: "Локальная демонстрация",
-  },
-  updates: {
-    title: "Обновлений нет",
-    detail: "Статусы и каналы не подключены к этому безопасному макету.",
-    action: "Без внешней синхронизации",
-  },
-  groups: {
-    title: "Сообществ нет",
-    detail: "Демонстрационный интерфейс не создаёт группы и не добавляет участников.",
-    action: "Работа только в браузере",
-  },
+type Message = {
+  id: string;
+  text: string;
+  time: string;
+  sender: "me" | "them";
 };
 
-export default function Home() {
-  const [area, setArea] = useState<Area>("chats");
-  const [query, setQuery] = useState("");
-  const [privacyOpen, setPrivacyOpen] = useState(false);
-  const [sideOpen, setSideOpen] = useState(false);
-  const copy = useMemo(() => emptyCopy[area], [area]);
+type Chat = {
+  id: string;
+  name: string;
+  subtitle?: string;
+  initials: string;
+  color: string;
+  preview: string;
+  time: string;
+  unread?: number;
+  pinned?: boolean;
+  messages: Message[];
+};
 
-  function signalLocalAction(label: string) {
-    toast(`${label}: доступно только как визуальный элемент`, {
-      description: "Демо не подключается к контактам, аккаунтам или перепискам.",
+const seedChats: Chat[] = [
+  { id: "self", name: "Дқн (Вы)", subtitle: "Сообщение для себя", initials: "Д", color: "#f2dccd", preview: "сдерживаясь", time: "Вчера", pinned: true, messages: [{ id: "seed-self", text: "сдерживаясь", time: "08:20", sender: "me" }] },
+  { id: "mom", name: "Мама❤️", initials: "М", color: "#f8ebc9", preview: "Мороженый ды жин", time: "16:16", messages: [{ id: "seed-mom", text: "Мороженый ды жин", time: "16:16", sender: "them" }] },
+  { id: "class-a", name: "10 “А” Aqbobek lyceum 🤝", initials: "10", color: "#293d35", preview: "Нұриддин: Стикер", time: "01:08", messages: [{ id: "seed-class-a", text: "Нұриддин: Стикер", time: "01:08", sender: "them" }] },
+  { id: "classmates", name: "10ашники", initials: "10", color: "#403c3a", preview: "Карим 157,6: Қазір гугода неге тұрғанын білмейм", time: "00:57", messages: [{ id: "seed-classmates", text: "Карим 157,6: Қазір гугода неге тұрғанын білмейм", time: "00:57", sender: "them" }] },
+  { id: "school", name: "МЕКТЕП 2025-2026", initials: "М", color: "#6aa59e", preview: "~Абылай: нурхан", time: "Вчера", messages: [{ id: "seed-school", text: "~Абылай: нурхан", time: "Вчера", sender: "them" }] },
+  { id: "brother", name: "Абду інім", initials: "А", color: "#c6eaf4", preview: "Сені сатат", time: "Вчера", messages: [{ id: "seed-brother", text: "Сені сатат", time: "Вчера", sender: "them" }] },
+  { id: "karim", name: "Карим 157,6", initials: "К", color: "#161616", preview: "Ок", time: "Вчера", messages: [{ id: "seed-karim", text: "Ок", time: "Вчера", sender: "them" }] },
+  { id: "anar", name: "Анар тәтe", initials: "АТ", color: "#f1d7b9", preview: "Молодец!", time: "Вчера", messages: [{ id: "seed-anar", text: "Молодец!", time: "Вчера", sender: "them" }] },
+  { id: "apa", name: "Апа", initials: "А", color: "#f3e3d2", preview: "Фото", time: "Вчера", messages: [{ id: "seed-apa", text: "Фото", time: "Вчера", sender: "them" }] },
+  { id: "arsen", name: "Арсенчик", initials: "А", color: "#c6d7d3", preview: "Только магазинге колхат пен шығасың", time: "Вчера", messages: [{ id: "seed-arsen", text: "Только магазинге колхат пен шығасың", time: "Вчера", sender: "them" }] },
+];
+
+function formatTime() {
+  return new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(new Date());
+}
+
+function ChatAvatar({ chat, large = false }: { chat: Chat; large?: boolean }) {
+  return (
+    <div
+      className={`${large ? "h-10 w-10 text-sm" : "h-12 w-12 text-[15px]"} grid shrink-0 place-items-center rounded-full font-semibold text-[#3c3c3c]`}
+      style={{ backgroundColor: chat.color }}
+      aria-hidden="true"
+    >
+      {chat.initials}
+    </div>
+  );
+}
+
+export default function Home() {
+  const [chats, setChats] = useState<Chat[]>(() => {
+    try {
+      const stored = window.localStorage.getItem("whatsapp-local-demo-chats");
+      return stored ? JSON.parse(stored) : seedChats;
+    } catch {
+      return seedChats;
+    }
+  });
+  const [activeChatId, setActiveChatId] = useState("self");
+  const [query, setQuery] = useState("");
+  const [message, setMessage] = useState("");
+  const [mobileListOpen, setMobileListOpen] = useState(true);
+  const [filter, setFilter] = useState<"all" | "unread" | "starred">("all");
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+
+  useEffect(() => {
+    window.localStorage.setItem("whatsapp-local-demo-chats", JSON.stringify(chats));
+  }, [chats]);
+
+  const activeChat = chats.find((chat) => chat.id === activeChatId) ?? chats[0];
+  const filteredChats = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return chats.filter((chat) => {
+      const matchesQuery = !needle || `${chat.name} ${chat.preview}`.toLocaleLowerCase().includes(needle);
+      const matchesFilter = filter === "all" || (filter === "unread" && Boolean(chat.unread)) || (filter === "starred" && chat.id === "self");
+      return matchesQuery && matchesFilter;
+    });
+  }, [chats, filter, query]);
+
+  function openChat(id: string) {
+    setActiveChatId(id);
+    setMobileListOpen(false);
+  }
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    const text = message.trim();
+    if (!text || !activeChat) return;
+    const time = formatTime();
+    const nextMessage: Message = { id: crypto.randomUUID(), text, time, sender: "me" };
+    setChats((current) => current.map((chat) => chat.id === activeChat.id
+      ? { ...chat, preview: text, time, messages: [...chat.messages, nextMessage] }
+      : chat));
+    setMessage("");
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
+
+  function explainNonNetworkAction(label: string) {
+    toast(`${label} доступно только как интерфейсный элемент`, {
+      description: "Демо работает локально и не взаимодействует с WhatsApp.",
     });
   }
 
+  if (!activeChat) return null;
+
   return (
-    <main className="min-h-screen bg-[#e6eee9] px-0 py-0 text-[#14352a] lg:flex lg:items-center lg:justify-center lg:p-7">
-      <section className="relative min-h-screen w-full overflow-hidden bg-[#f7faf8] lg:min-h-0 lg:max-w-[1520px] lg:rounded-[26px] lg:shadow-[0_26px_80px_rgba(25,67,51,0.18)]">
-        <div className="absolute inset-x-0 top-0 h-1 bg-[#1fae7a]" />
-        <div className="flex h-screen min-h-[620px] w-full">
-          <aside className="hidden w-[76px] flex-col items-center border-r border-[#dce7e1] bg-[#fbfdfc] py-5 md:flex">
-            <button className="group mb-7 grid h-11 w-11 place-items-center rounded-2xl bg-[#e4f6ef] transition-transform duration-150 active:scale-95" aria-label="Главная">
-              <img src="/manus-storage/chat-demo-logo_a4acb765.png" alt="Chat Demo" className="h-8 w-8 object-contain" />
-            </button>
-            <nav className="flex flex-1 flex-col items-center gap-2" aria-label="Разделы">
-              {navigation.map((item) => {
-                const Icon = item.icon;
-                const active = item.id === area;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setArea(item.id)}
-                    aria-label={item.label}
-                    aria-current={active ? "page" : undefined}
-                    className={`relative grid h-11 w-11 place-items-center rounded-xl transition-all duration-150 active:scale-95 ${active ? "bg-[#daf3e9] text-[#13865e]" : "text-[#70867d] hover:bg-[#edf4f0] hover:text-[#315b4b]"}`}
-                  >
-                    <Icon className="h-[21px] w-[21px] stroke-[1.7]" />
-                    {active && <span className="absolute -left-[18px] h-5 w-[3px] rounded-r-full bg-[#1fae7a]" />}
-                  </button>
-                );
-              })}
+    <main className="min-h-screen bg-[#f0f2f5] font-ui text-[#111b21]">
+      <div className="hidden h-[126px] bg-[#00a884] lg:block" />
+      <section className="relative mx-auto min-h-screen w-full overflow-hidden bg-white shadow-[0_6px_18px_rgba(11,20,26,0.12)] lg:-mt-[108px] lg:min-h-[calc(100vh-40px)] lg:max-w-[1600px] lg:rounded-sm">
+        <div className="flex min-h-screen">
+          <aside className="hidden w-[64px] flex-col items-center border-r border-[#e9edef] bg-[#f0f2f5] py-4 md:flex" aria-label="Основные разделы">
+            <nav className="flex flex-1 flex-col items-center gap-4">
+              <button onClick={() => explainNonNetworkAction("Чаты")} className="relative grid h-10 w-10 place-items-center rounded-lg bg-[#d9fdd3] text-[#00a884]" aria-label="Чаты">
+                <MessageCircleMore className="h-[23px] w-[23px] stroke-[1.7]" />
+                <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-[#25d366] px-1 text-[9px] font-bold text-white">5</span>
+              </button>
+              <button onClick={() => explainNonNetworkAction("Звонки")} className="grid h-10 w-10 place-items-center rounded-lg text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Звонки"><Phone className="h-5 w-5 stroke-[1.7]" /></button>
+              <button onClick={() => explainNonNetworkAction("Статус")} className="grid h-10 w-10 place-items-center rounded-lg text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Статус"><Clock3 className="h-5 w-5 stroke-[1.7]" /></button>
+              <button onClick={() => explainNonNetworkAction("Каналы")} className="grid h-10 w-10 place-items-center rounded-lg text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Каналы"><Camera className="h-5 w-5 stroke-[1.7]" /></button>
+              <button onClick={() => explainNonNetworkAction("Сообщества")} className="grid h-10 w-10 place-items-center rounded-lg text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Сообщества"><UsersRound className="h-5 w-5 stroke-[1.7]" /></button>
             </nav>
-            <div className="flex flex-col gap-2">
-              <button onClick={() => setPrivacyOpen(true)} aria-label="Приватность" className="grid h-11 w-11 place-items-center rounded-xl text-[#70867d] transition hover:bg-[#edf4f0] hover:text-[#315b4b] active:scale-95">
-                <ShieldCheck className="h-[20px] w-[20px] stroke-[1.7]" />
-              </button>
-              <button onClick={() => signalLocalAction("Настройки")} aria-label="Настройки" className="grid h-11 w-11 place-items-center rounded-xl text-[#70867d] transition hover:bg-[#edf4f0] hover:text-[#315b4b] active:scale-95">
-                <Settings2 className="h-[20px] w-[20px] stroke-[1.7]" />
-              </button>
+            <div className="flex flex-col gap-3">
+              <button onClick={() => explainNonNetworkAction("Настройки")} className="grid h-10 w-10 place-items-center rounded-lg text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Настройки"><Settings className="h-5 w-5 stroke-[1.7]" /></button>
+              <button onClick={() => explainNonNetworkAction("Профиль")} className="grid h-10 w-10 place-items-center rounded-lg text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Профиль"><CircleUserRound className="h-6 w-6 stroke-[1.5]" /></button>
             </div>
           </aside>
 
-          <section className={`${sideOpen ? "absolute inset-0 z-30 flex w-full md:relative md:z-auto md:w-[356px]" : "hidden md:flex"} w-full flex-col border-r border-[#dce7e1] bg-[#fbfdfc] md:w-[356px]`} aria-label="Список">
-            <header className="flex items-center justify-between px-5 pb-4 pt-7">
-              <div>
-                <div className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[#1a9a6e]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#1fae7a]" /> только локальный режим
-                </div>
-                <h1 className="text-[26px] font-extrabold tracking-[-0.04em] text-[#173c2f]">{area === "chats" ? "Чаты" : area === "updates" ? "Обновления" : "Сообщества"}</h1>
+          <section className={`${mobileListOpen ? "flex" : "hidden"} w-full flex-col border-r border-[#e9edef] bg-white md:flex md:w-[420px]`} aria-label="Список чатов">
+            <header className="flex h-[76px] items-center justify-between bg-[#f0f2f5] px-4">
+              <div className="flex items-center gap-2.5">
+                <div className="grid h-10 w-10 place-items-center rounded-full bg-[#25d366] text-white shadow-sm"><MessageCircleMore className="h-5 w-5 fill-current stroke-[#25d366]" /></div>
+                <span className="text-[20px] font-bold tracking-[-0.04em] text-[#00a884]">WhatsApp</span>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => signalLocalAction("Новая запись")} className="grid h-9 w-9 place-items-center rounded-xl text-[#5d766b] transition hover:bg-[#eef5f1] hover:text-[#176445] active:scale-95" aria-label="Создать">
-                  <Plus className="h-[19px] w-[19px]" />
-                </button>
-                <button onClick={() => signalLocalAction("Дополнительное меню")} className="grid h-9 w-9 place-items-center rounded-xl text-[#5d766b] transition hover:bg-[#eef5f1] hover:text-[#176445] active:scale-95" aria-label="Дополнительное меню">
-                  <MoreHorizontal className="h-[20px] w-[20px]" />
-                </button>
-                <button onClick={() => setSideOpen(false)} className="grid h-9 w-9 place-items-center rounded-xl text-[#5d766b] md:hidden" aria-label="Закрыть список">
-                  <X className="h-[20px] w-[20px]" />
-                </button>
+                <button onClick={() => explainNonNetworkAction("Новый чат")} className="grid h-10 w-10 place-items-center rounded-full text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Новый чат"><Plus className="h-[22px] w-[22px]" /></button>
+                <button onClick={() => explainNonNetworkAction("Меню")} className="grid h-10 w-10 place-items-center rounded-full text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Меню"><MoreVertical className="h-[21px] w-[21px]" /></button>
               </div>
             </header>
 
-            <div className="px-4 pb-4">
-              <label className="flex h-11 items-center gap-3 rounded-xl bg-[#edf3f0] px-3 text-[#6b8178] transition focus-within:ring-2 focus-within:ring-[#94ddbf]" htmlFor="search">
+            <div className="border-b border-[#e9edef] px-3 pb-3 pt-2">
+              <label className="flex h-[38px] items-center gap-4 rounded-lg bg-[#f0f2f5] px-4 text-[#54656f] focus-within:ring-2 focus-within:ring-[#a6e5d4]" htmlFor="chat-search">
                 <Search className="h-[18px] w-[18px]" />
-                <input id="search" value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm font-medium text-[#254b3d] outline-none placeholder:text-[#7d9188]" placeholder="Поиск по локальному макету" />
-                {query && <button onClick={() => setQuery("")} className="text-[#648075]" aria-label="Очистить поиск"><X className="h-4 w-4" /></button>}
+                <input id="chat-search" value={query} onChange={(event) => setQuery(event.target.value)} className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-[#667781]" placeholder="Поиск или новый чат" />
+                {query && <button onClick={() => setQuery("")} aria-label="Очистить поиск"><X className="h-4 w-4" /></button>}
               </label>
             </div>
 
-            <div className="border-y border-[#e3ece7] px-5 py-3">
-              <div className="flex items-center gap-2 text-xs font-semibold text-[#658078]">
-                <Archive className="h-4 w-4" /> Архив пуст
-              </div>
+            <div className="flex gap-2 overflow-x-auto border-b border-[#e9edef] px-3 py-2.5 [scrollbar-width:none]">
+              {([ ["all", "Все"], ["unread", "Непрочитанное 5"], ["starred", "Избранное"] ] as const).map(([id, label]) => (
+                <button key={id} onClick={() => setFilter(id)} className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] transition ${filter === id ? "bg-[#d9fdd3] font-semibold text-[#008069]" : "border border-[#e0e4e6] bg-white text-[#54656f] hover:bg-[#f0f2f5]"}`}>{label}</button>
+              ))}
+              <button onClick={() => explainNonNetworkAction("Дополнительные фильтры")} className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[#e0e4e6] text-[#54656f]" aria-label="Дополнительные фильтры"><ChevronDown className="h-4 w-4" /></button>
             </div>
 
-            <div className="flex flex-1 flex-col items-center justify-center px-9 text-center">
-              <div className="mb-4 grid h-14 w-14 place-items-center rounded-[21px] bg-[#e8f5ef] text-[#1a9a6e]">
-                <UsersRound className="h-6 w-6 stroke-[1.6]" />
-              </div>
-              <p className="text-sm font-bold text-[#284b3e]">{query ? "Совпадений не найдено" : copy.title}</p>
-              <p className="mt-2 max-w-[226px] text-[12px] leading-5 text-[#7b9086]">{query ? "Поиск выполняется только по данным, которые вы добавите сами." : copy.detail}</p>
-            </div>
+            <button onClick={() => explainNonNetworkAction("Закрытые чаты")} className="flex h-[56px] items-center gap-5 border-b border-[#f0f2f5] px-5 text-left text-sm text-[#3b4a54] transition hover:bg-[#f5f6f6]"><LockKeyhole className="h-5 w-5 text-[#54656f]" /> Закрытые чаты</button>
+            <button onClick={() => explainNonNetworkAction("Архив")} className="flex h-[56px] items-center gap-5 border-b border-[#f0f2f5] px-5 text-left text-sm text-[#3b4a54] transition hover:bg-[#f5f6f6]"><Archive className="h-5 w-5 text-[#54656f]" /> В архиве <span className="ml-auto pr-1 text-xs text-[#667781]">1</span></button>
 
-            <footer className="m-4 mt-0 rounded-2xl border border-[#d9ebe2] bg-[#f3faf6] p-3.5">
-              <div className="flex gap-2.5">
-                <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-[#1a966a]" />
-                <div>
-                  <p className="text-[11px] font-bold text-[#3a6152]">Не подключено к WhatsApp</p>
-                  <p className="mt-0.5 text-[10px] leading-4 text-[#789087]">Это отдельная визуальная демонстрация интерфейса.</p>
-                </div>
-              </div>
-            </footer>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {filteredChats.map((chat) => {
+                const isActive = chat.id === activeChat.id;
+                return (
+                  <button key={chat.id} onClick={() => openChat(chat.id)} className={`group flex w-full items-center gap-3 px-3 py-3 text-left transition ${isActive ? "bg-[#f0f2f5]" : "hover:bg-[#f5f6f6]"}`}>
+                    <ChatAvatar chat={chat} />
+                    <div className="min-w-0 flex-1 border-b border-[#f0f2f5] pb-3 group-last:border-b-0">
+                      <div className="flex items-center gap-3">
+                        <p className="min-w-0 flex-1 truncate text-[15px] font-medium text-[#111b21]">{chat.name}</p>
+                        <span className={`text-[11px] ${chat.unread ? "font-semibold text-[#25d366]" : "text-[#667781]"}`}>{chat.time}</span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <CheckCheck className="h-4 w-4 shrink-0 text-[#53bdeb]" />
+                        <p className="min-w-0 flex-1 truncate text-[13px] text-[#667781]">{chat.preview}</p>
+                        {chat.pinned && <span className="text-[12px] text-[#667781]">⌖</span>}
+                        {chat.unread && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-[#25d366] px-1 text-[10px] font-bold text-white">{chat.unread}</span>}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              {!filteredChats.length && <div className="px-10 py-16 text-center text-sm text-[#667781]">Ничего не найдено</div>}
+            </div>
           </section>
 
-          <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[#e9f1ed]" aria-label="Рабочая область">
-            <div className="absolute inset-0 bg-cover bg-center opacity-[0.84]" style={{ backgroundImage: "url('/manus-storage/chat-demo-wallpaper_84d6a701.jpg')" }} />
-            <div className="absolute inset-0 bg-[#e7efe9]/70" />
-
-            <header className="relative z-10 flex h-[76px] shrink-0 items-center justify-between border-b border-[#d8e4de]/90 bg-[#fbfdfc]/90 px-4 backdrop-blur-md sm:px-6">
+          <section className={`${mobileListOpen ? "hidden" : "flex"} relative min-w-0 flex-1 flex-col bg-[#efeae2] md:flex`} aria-label="Открытый чат">
+            <div className="absolute inset-0 bg-cover bg-center opacity-[0.27]" style={{ backgroundImage: "url('/manus-storage/chat-demo-wallpaper_84d6a701.jpg')" }} />
+            <header className="relative z-10 flex h-[76px] shrink-0 items-center justify-between bg-[#f0f2f5] px-3 sm:px-4">
               <div className="flex min-w-0 items-center gap-3">
-                <button onClick={() => setSideOpen(true)} className="grid h-10 w-10 place-items-center rounded-xl text-[#547166] hover:bg-[#eef5f1] md:hidden" aria-label="Открыть список">
-                  <Menu className="h-5 w-5" />
-                </button>
-                <div className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[15px] border border-[#d4ebe0] bg-[#e8f7ef]">
-                  <img src="/manus-storage/chat-demo-logo_a4acb765.png" alt="" className="h-7 w-7 object-contain" />
-                  <span className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#1fae7a]" />
-                </div>
+                <button onClick={() => setMobileListOpen(true)} className="grid h-10 w-10 place-items-center rounded-full text-[#54656f] hover:bg-[#dfe4e7] md:hidden" aria-label="К списку чатов"><Menu className="h-5 w-5" /></button>
+                <ChatAvatar chat={activeChat} large />
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h2 className="truncate text-sm font-extrabold tracking-[-0.02em] text-[#1b4031]">Chat Demo</h2>
-                    <span className="hidden rounded-md bg-[#e4f6ed] px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.1em] text-[#13835d] sm:inline">локально</span>
-                  </div>
-                  <p className="truncate text-[11px] font-medium text-[#71877d]">Данные пользователя не загружаются</p>
+                  <h1 className="truncate text-[15px] font-medium text-[#111b21]">{activeChat.name}</h1>
+                  <p className="truncate text-[12px] text-[#667781]">{activeChat.subtitle ?? "нажмите, чтобы посмотреть информацию"}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => setPrivacyOpen(true)} className="hidden h-9 items-center gap-2 rounded-xl border border-[#d6e9df] bg-white/75 px-3 text-[11px] font-bold text-[#40705d] transition hover:border-[#a6d9c0] hover:bg-white sm:flex active:scale-[0.97]" aria-label="Открыть информацию о приватности">
-                  <ShieldCheck className="h-4 w-4 text-[#1b9a6e]" /> Защита данных
-                </button>
-                <button onClick={() => signalLocalAction("Дополнительное меню")} className="grid h-9 w-9 place-items-center rounded-xl text-[#5d766b] transition hover:bg-[#edf5f0] active:scale-95" aria-label="Дополнительное меню">
-                  <MoreHorizontal className="h-[20px] w-[20px]" />
-                </button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => explainNonNetworkAction("Видеозвонок")} className="grid h-10 w-10 place-items-center rounded-full text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Видеозвонок"><Video className="h-5 w-5" /></button>
+                <button onClick={() => explainNonNetworkAction("Поиск в чате")} className="grid h-10 w-10 place-items-center rounded-full text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Поиск"><Search className="h-5 w-5" /></button>
+                <button onClick={() => explainNonNetworkAction("Меню чата")} className="grid h-10 w-10 place-items-center rounded-full text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Меню чата"><MoreVertical className="h-5 w-5" /></button>
               </div>
             </header>
 
-            <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-5 py-8 text-center panel-enter">
-              <div className="relative mb-2 w-[210px] sm:w-[260px]">
-                <div className="absolute -inset-5 rounded-full bg-[#d3f3e4]/60 blur-2xl" />
-                <img src="/manus-storage/chat-demo-empty-state_43f62d74.png" alt="Абстрактная иллюстрация закрытого локального чата" className="relative mx-auto w-full object-contain drop-shadow-[0_18px_24px_rgba(35,96,70,0.16)]" />
-              </div>
-              <div className="max-w-[430px] rounded-[22px] border border-white/80 bg-[#fbfdfc]/75 px-7 py-5 shadow-[0_12px_32px_rgba(51,94,76,0.08)] backdrop-blur-sm">
-                <div className="mb-2 flex items-center justify-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#198d64]"><Sparkles className="h-3.5 w-3.5" /> {copy.action}</div>
-                <h3 className="text-[21px] font-extrabold tracking-[-0.035em] text-[#1b4333] sm:text-[25px]">{copy.title}</h3>
-                <p className="mx-auto mt-2 max-w-[345px] text-[12px] leading-5 text-[#6c8479]">{copy.detail}</p>
-                <button onClick={() => setPrivacyOpen(true)} className="mt-4 inline-flex items-center gap-2 text-[11px] font-extrabold text-[#16855e] underline decoration-[#9bdaba] decoration-2 underline-offset-4 transition hover:text-[#0f6e4c]">
-                  <LockKeyhole className="h-3.5 w-3.5" /> Как устроена защита в демо
-                </button>
+            <div className="relative z-10 min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-[7%]">
+              <div className="mx-auto mb-6 w-fit rounded-lg bg-[#ffeecd] px-3 py-1.5 text-center text-[11px] leading-4 text-[#54656f] shadow-sm">Сообщения в этом макете сохраняются только в этом браузере.</div>
+              <div className="mx-auto mb-5 w-fit rounded-lg bg-white/85 px-3 py-1 text-[11px] text-[#667781] shadow-sm">Вчера</div>
+              <div className="space-y-1.5">
+                {activeChat.messages.map((item) => (
+                  <div key={item.id} className={`flex ${item.sender === "me" ? "justify-end" : "justify-start"}`}>
+                    <div className={`${item.sender === "me" ? "bg-[#d9fdd3]" : "bg-white"} max-w-[80%] rounded-lg px-2.5 py-1.5 shadow-[0_1px_1px_rgba(11,20,26,0.13)] sm:max-w-[65%]`}>
+                      <p className="whitespace-pre-wrap break-words text-[14px] leading-5 text-[#111b21]">{item.text}</p>
+                      <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-[#667781]">{item.time}{item.sender === "me" && <CheckCheck className="h-3.5 w-3.5 text-[#53bdeb]" />}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <footer className="relative z-10 border-t border-[#d8e5df] bg-[#f5f9f7]/90 px-3 py-3 backdrop-blur-md sm:px-5">
-              <div className="flex items-center gap-2 rounded-2xl border border-[#d9e7e0] bg-[#edf3f0]/90 px-3 py-1.5 opacity-90">
-                <button disabled className="grid h-9 w-9 place-items-center rounded-xl text-[#9eaea7]" aria-label="Дополнительно"><Plus className="h-[19px] w-[19px]" /></button>
-                <div className="flex h-9 min-w-0 flex-1 items-center rounded-xl px-2 text-[12px] font-medium text-[#92a29b]">Ввод сообщений отключён в визуальном режиме</div>
-                <button disabled className="grid h-9 w-9 place-items-center rounded-xl text-[#9eaea7]" aria-label="Отправить"><ChevronDown className="h-[18px] w-[18px] rotate-[-90deg]" /></button>
+            <form onSubmit={handleSubmit} className="relative z-10 flex shrink-0 items-end gap-1 bg-[#f0f2f5] px-2 py-2 sm:px-4">
+              <div className="relative">
+                <button type="button" onClick={() => setShowAttachmentMenu((value) => !value)} className="grid h-10 w-10 place-items-center rounded-full text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Прикрепить"><Plus className="h-6 w-6" /></button>
+                {showAttachmentMenu && (
+                  <div className="absolute bottom-12 left-0 z-30 w-44 overflow-hidden rounded-xl bg-white py-1 shadow-[0_8px_24px_rgba(11,20,26,0.18)]">
+                    <button type="button" onClick={() => explainNonNetworkAction("Документ")} className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-[#f5f6f6]"><FileText className="h-4 w-4 text-[#7f66ff]" /> Документ</button>
+                    <button type="button" onClick={() => explainNonNetworkAction("Фотография")} className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-[#f5f6f6]"><Image className="h-4 w-4 text-[#e55980]" /> Фото и видео</button>
+                    <button type="button" onClick={() => explainNonNetworkAction("Контакт")} className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-[#f5f6f6]"><CircleUserRound className="h-4 w-4 text-[#039be5]" /> Контакт</button>
+                  </div>
+                )}
               </div>
-            </footer>
+              <button type="button" onClick={() => explainNonNetworkAction("Смайлики")} className="grid h-10 w-10 place-items-center rounded-full text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Смайлики"><Smile className="h-[22px] w-[22px]" /></button>
+              <textarea value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleComposerKeyDown} className="max-h-28 min-h-10 flex-1 resize-none rounded-lg bg-white px-3 py-2.5 text-[14px] leading-5 outline-none placeholder:text-[#667781]" placeholder="Введите сообщение" aria-label="Введите сообщение" rows={1} />
+              {message.trim() ? (
+                <button type="submit" className="grid h-10 w-10 place-items-center rounded-full text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Отправить"><SendHorizontal className="h-5 w-5" /></button>
+              ) : (
+                <button type="button" onClick={() => explainNonNetworkAction("Голосовое сообщение")} className="grid h-10 w-10 place-items-center rounded-full text-[#54656f] transition hover:bg-[#dfe4e7]" aria-label="Голосовое сообщение"><Mic className="h-5 w-5" /></button>
+              )}
+            </form>
           </section>
         </div>
-
-        {privacyOpen && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#153d2e]/35 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="О приватности демо">
-            <section className="relative w-full max-w-[620px] overflow-hidden rounded-[28px] border border-white/80 bg-[#fcfefc] shadow-[0_24px_80px_rgba(19,60,44,0.27)] panel-enter">
-              <button onClick={() => setPrivacyOpen(false)} className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-xl bg-white/85 text-[#547369] shadow-sm transition hover:bg-white active:scale-95" aria-label="Закрыть"><X className="h-5 w-5" /></button>
-              <div className="relative h-[165px] overflow-hidden bg-[#e7f2ec]">
-                <img src="/manus-storage/chat-demo-privacy-art_a5092664.jpg" alt="Абстрактное изображение защищённой беседы" className="h-full w-full object-cover opacity-90" />
-                <div className="absolute inset-0 bg-gradient-to-r from-[#e5f5ed]/65 via-transparent to-transparent" />
-              </div>
-              <div className="px-6 pb-7 pt-5 sm:px-8">
-                <div className="mb-3 flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-[#16865f]"><ShieldCheck className="h-4 w-4" /> визуальная демо-версия</div>
-                <h3 className="text-2xl font-extrabold tracking-[-0.04em] text-[#174332]">Личные данные остаются вне макета</h3>
-                <p className="mt-3 max-w-[500px] text-sm leading-6 text-[#638075]">Страница не запрашивает доступ к WhatsApp, телефонной книге или содержимому переписок. Кнопки показывают состояние интерфейса и не создают контакты, чаты или сообщения.</p>
-                <div className="mt-5 grid gap-2 sm:grid-cols-3">
-                  {["Без аккаунта", "Без синхронизации", "Без отправки"].map((item) => <div key={item} className="rounded-xl bg-[#eff8f3] px-3 py-2 text-center text-[11px] font-bold text-[#36725a]">{item}</div>)}
-                </div>
-              </div>
-            </section>
-          </div>
-        )}
-
-        <div className="pointer-events-none absolute bottom-4 right-5 hidden items-center gap-2 rounded-full border border-[#d5e8dd] bg-white/85 px-3 py-1.5 text-[10px] font-bold text-[#658278] shadow-sm backdrop-blur-md lg:flex"><PanelLeft className="h-3.5 w-3.5" /> Визуальный макет</div>
+        <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 hidden -translate-x-1/2 items-center gap-1.5 rounded-full bg-white/85 px-3 py-1 text-[10px] text-[#667781] shadow-sm backdrop-blur md:flex"><BellOff className="h-3 w-3" /> локальная копия — сообщения не отправляются в WhatsApp</div>
       </section>
     </main>
   );
