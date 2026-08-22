@@ -36,36 +36,46 @@ export const appRouter = router({
       )
       .mutation(async ({ input }) => {
         const { data: models } = await listLLMModels();
-        const model =
-          models.find((entry) => entry.id === "gpt-5-mini")?.id ??
-          models.find((entry) => entry.id.startsWith("gpt-5"))?.id ??
-          models[0]?.id;
+        const candidateModels = [
+          models.find((entry) => entry.id === "gpt-5")?.id,
+          models.find((entry) => entry.id === "gpt-5-mini")?.id,
+          models.find((entry) => entry.id === "gemini-3-flash-preview")?.id,
+        ].filter((model): model is string => Boolean(model));
 
-        if (!model) {
+        if (candidateModels.length === 0) {
           throw new Error("No LLM model is available for Ldoug AI");
         }
 
-        const response = await invokeLLM({
-          model,
-          maxTokens: 900,
-          reasoning: { effort: "minimal" },
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are Ldoug AI, a concise, friendly general assistant inside a private local messenger. Reply in the user's language when possible. Be helpful, factual, and clear. Do not claim access to WhatsApp, contacts, private chats, or external accounts. Use Markdown only when it improves readability.",
-            },
-            ...input.messages,
-          ],
-        });
+        const messages = [
+          {
+            role: "system" as const,
+            content:
+              "You are Ldoug AI, an intelligent general-purpose assistant inside a private messenger. Answer fully and directly: first give the useful conclusion, then explain the important reasoning, steps, examples, or caveats when they help. Match the user's language. Never return a vague placeholder or an unfinished answer. If a request lacks details, state a reasonable assumption and still provide the best actionable answer. Do not claim access to WhatsApp, contacts, private chats, or external accounts. Format longer answers with concise Markdown headings and lists.",
+          },
+          ...input.messages,
+        ];
 
-        const content = response.choices[0]?.message?.content;
-        return {
-          message:
-            typeof content === "string" && content.trim()
-              ? content.trim()
-              : "Ldoug AI не смог подготовить ответ. Попробуйте переформулировать вопрос.",
-        };
+        let lastError: unknown;
+        for (const model of candidateModels) {
+          try {
+            const response = await invokeLLM({
+              model,
+              maxTokens: 1_800,
+              ...(model.startsWith("gpt-5") ? { reasoning: { effort: "medium" } } : {}),
+              messages,
+            });
+            const content = response.choices[0]?.message?.content;
+            if (typeof content === "string" && content.trim()) {
+              return { message: content.trim() };
+            }
+            lastError = new Error(`Model ${model} returned an empty response`);
+          } catch (error) {
+            lastError = error;
+          }
+        }
+
+        console.error("Ldoug AI failed after model fallbacks", lastError);
+        throw new Error("Ldoug AI is temporarily unavailable. Please try again.");
       }),
   }),
 

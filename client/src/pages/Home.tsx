@@ -123,22 +123,26 @@ function SimpleView({ t, type, dark }: { t: Record<string, string>; type: "calls
 
 function AiView({ t, dark }: { t: Record<string, string>; dark: boolean }) {
   const [messages, setMessages] = useState<AIMessage[]>([]);
+  const [failedPrompt, setFailedPrompt] = useState<string | null>(null);
   const chat = trpc.ai.chat.useMutation();
 
-  async function send(content: string) {
-    const next = [...messages, { role: "user" as const, content }];
-    setMessages(next);
+  async function send(content: string, retry = false) {
+    const next = retry ? messages : [...messages, { role: "user" as const, content }];
+    if (!retry) setMessages(next);
     try {
+      const contextWindow = next.slice(-24);
       const response = await chat.mutateAsync({
-        messages: next.map(({ role, content: body }) => ({ role: role === "assistant" ? "assistant" as const : "user" as const, content: body })),
+        messages: contextWindow.map(({ role, content: body }) => ({ role: role === "assistant" ? "assistant" as const : "user" as const, content: body })),
       });
       setMessages((items) => [...items, { role: "assistant", content: response.message }]);
+      setFailedPrompt(null);
     } catch {
+      setFailedPrompt(content);
       toast.error("Ldoug AI", { description: t.aiUnavailable });
     }
   }
 
-  return <section className={`flex min-w-0 flex-1 flex-col ${dark ? "bg-[#0b141a]" : "bg-[#f8faf9]"}`}><header className={`flex h-[76px] items-center justify-between border-b px-6 ${dark ? "border-[#2a3942] bg-[#111b21] text-[#e9edef]" : "border-[#e9edef] bg-white"}`}><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-[#8b5cf6] via-[#d946ef] to-[#fb923c] text-white"><Sparkles className="h-5 w-5" /></div><div><h1 className="text-[16px] font-semibold">Ldoug AI</h1><p className="mt-0.5 text-xs text-[#667781]">{t.aiDescription}</p></div></div><span className="rounded-full bg-[#e5f7ed] px-2.5 py-1 text-[10px] font-bold text-[#008069]">AI</span></header><div className="flex flex-1 items-center justify-center p-3 sm:p-6"><AIChatBox messages={messages} onSendMessage={send} isLoading={chat.isPending} height="560px" className={`w-full max-w-[860px] max-h-[calc(100vh-150px)] ${dark ? "bg-[#111b21] text-[#e9edef]" : "bg-white"}`} placeholder={t.askAi} emptyStateMessage={t.aiReady} suggestedPrompts={[t.newQuestion, t.askAi]} /></div></section>;
+  return <section className={`flex min-w-0 flex-1 flex-col ${dark ? "bg-[#0b141a]" : "bg-[#f8faf9]"}`}><header className={`flex h-[76px] items-center justify-between border-b px-6 ${dark ? "border-[#2a3942] bg-[#111b21] text-[#e9edef]" : "border-[#e9edef] bg-white"}`}><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-[#8b5cf6] via-[#d946ef] to-[#fb923c] text-white"><Sparkles className="h-5 w-5" /></div><div><h1 className="text-[16px] font-semibold">Ldoug AI</h1><p className="mt-0.5 text-xs text-[#667781]">{t.aiDescription}</p></div></div><span className="rounded-full bg-[#e5f7ed] px-2.5 py-1 text-[10px] font-bold text-[#008069]">AI</span></header><div className="flex flex-1 flex-col items-center justify-center gap-3 p-3 sm:p-6">{failedPrompt && <div className={`flex w-full max-w-[860px] items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-sm ${dark ? "border-amber-400/20 bg-amber-400/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-900"}`}><span>Ответ временно не получен. Вопрос сохранён.</span><button onClick={() => send(failedPrompt, true)} disabled={chat.isPending} className="shrink-0 rounded-lg bg-[#00a884] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Повторить</button></div>}<AIChatBox messages={messages} onSendMessage={send} isLoading={chat.isPending} height="560px" className={`w-full max-w-[860px] max-h-[calc(100vh-150px)] ${dark ? "bg-[#111b21] text-[#e9edef]" : "bg-white"}`} placeholder={t.askAi} emptyStateMessage={t.aiReady} suggestedPrompts={[t.newQuestion, t.askAi]} /></div></section>;
 }
 
 function Workspace({ username, logout, initialView }: { username: string; logout: () => void; initialView?: View }) {
