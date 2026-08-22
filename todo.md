@@ -85,7 +85,7 @@
 - [x] Исправить несовместимость версии pnpm в GitHub Actions и повторить публикацию.
 - [x] Добавить в статический интерфейс точную ссылку на Manus-версию с Ldoug AI.
 - [x] Переключить GitHub Pages с legacy-источника на публикацию из GitHub Actions.
-- [ ] Настроить маршрутизацию приложения для пути /ldoug-messenger/ на GitHub Pages.
+- [x] Настроить маршрутизацию приложения для пути /ldoug-messenger/ на GitHub Pages.
 
 ## Размещение на Vercel
 
