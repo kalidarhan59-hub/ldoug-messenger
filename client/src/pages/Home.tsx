@@ -122,13 +122,27 @@ function SimpleView({ t, type, dark }: { t: Record<string, string>; type: "calls
 }
 
 function AiView({ t, dark }: { t: Record<string, string>; dark: boolean }) {
-  const [messages, setMessages] = useState<AIMessage[]>([]); const chat = trpc.ai.chat.useMutation();
-  async function send(content: string) { const next = [...messages, { role: "user" as const, content }]; setMessages(next); try { const response = await chat.mutateAsync({ messages: next.map(({ role, content: body }) => ({ role: role === "assistant" ? "assistant" as const : "user" as const, content: body })) }); setMessages((items) => [...items, { role: "assistant", content: response.message }]); } catch { toast.error("Ldoug AI", { description: t.aiUnavailable }); } }
-  return <section className={`flex min-w-0 flex-1 flex-col ${dark ? "bg-[#0b141a]" : "bg-[#f8faf9]"}`}><header className={`flex h-[76px] items-center justify-between border-b px-6 ${dark ? "border-[#2a3942] bg-[#111b21] text-[#e9edef]" : "border-[#e9edef] bg-white"}`}><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-[#8b5cf6] via-[#d946ef] to-[#fb923c] text-white"><Sparkles className="h-5 w-5" /></div><div><h1 className="text-[16px] font-semibold">Ldoug AI</h1><p className="mt-0.5 text-xs text-[#667781]">{t.aiDescription}</p></div></div><span className="rounded-full bg-[#e5f7ed] px-2.5 py-1 text-[10px] font-bold text-[#008069]">AI</span></header><div className="min-h-0 flex-1 p-3 sm:p-6"><AIChatBox messages={messages} onSendMessage={send} isLoading={chat.isPending} height="100%" className={`mx-auto h-full w-full max-w-[900px] ${dark ? "bg-[#111b21] text-[#e9edef]" : "bg-white"}`} placeholder={t.askAi} emptyStateMessage={t.aiReady} suggestedPrompts={[t.newQuestion, t.askAi]} /></div></section>;
+  const [messages, setMessages] = useState<AIMessage[]>([]);
+  const chat = trpc.ai.chat.useMutation();
+
+  async function send(content: string) {
+    const next = [...messages, { role: "user" as const, content }];
+    setMessages(next);
+    try {
+      const response = await chat.mutateAsync({
+        messages: next.map(({ role, content: body }) => ({ role: role === "assistant" ? "assistant" as const : "user" as const, content: body })),
+      });
+      setMessages((items) => [...items, { role: "assistant", content: response.message }]);
+    } catch {
+      toast.error("Ldoug AI", { description: t.aiUnavailable });
+    }
+  }
+
+  return <section className={`flex min-w-0 flex-1 flex-col ${dark ? "bg-[#0b141a]" : "bg-[#f8faf9]"}`}><header className={`flex h-[76px] items-center justify-between border-b px-6 ${dark ? "border-[#2a3942] bg-[#111b21] text-[#e9edef]" : "border-[#e9edef] bg-white"}`}><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-[#8b5cf6] via-[#d946ef] to-[#fb923c] text-white"><Sparkles className="h-5 w-5" /></div><div><h1 className="text-[16px] font-semibold">Ldoug AI</h1><p className="mt-0.5 text-xs text-[#667781]">{t.aiDescription}</p></div></div><span className="rounded-full bg-[#e5f7ed] px-2.5 py-1 text-[10px] font-bold text-[#008069]">AI</span></header><div className="flex flex-1 items-center justify-center p-3 sm:p-6"><AIChatBox messages={messages} onSendMessage={send} isLoading={chat.isPending} height="560px" className={`w-full max-w-[860px] max-h-[calc(100vh-150px)] ${dark ? "bg-[#111b21] text-[#e9edef]" : "bg-white"}`} placeholder={t.askAi} emptyStateMessage={t.aiReady} suggestedPrompts={[t.newQuestion, t.askAi]} /></div></section>;
 }
 
-function Workspace({ username, logout }: { username: string; logout: () => void }) {
-  const { theme, toggleTheme } = useTheme(); const dark = theme === "dark"; const [preferences, setPreferences] = useState(() => read(KEYS.preferences, { language: "ru" as Lang, volume: 70, notifications: true })); const [view, setView] = useState<View>(() => read<View>(KEYS.view, "chats")); const [statuses, setStatuses] = useState<Status[]>(() => read(KEYS.statuses, [])); const [channels, setChannels] = useState<Channel[]>(() => read(KEYS.channels, [])); const [chats, setChats] = useState<Chat[]>(() => read(KEYS.chats, [])); const [newChat, setNewChat] = useState(false); const [chatName, setChatName] = useState(""); const t = text[preferences.language];
+function Workspace({ username, logout, initialView }: { username: string; logout: () => void; initialView?: View }) {
+  const { theme, toggleTheme } = useTheme(); const dark = theme === "dark"; const [preferences, setPreferences] = useState(() => read(KEYS.preferences, { language: "ru" as Lang, volume: 70, notifications: true })); const [view, setView] = useState<View>(() => initialView ?? read<View>(KEYS.view, "chats")); const [statuses, setStatuses] = useState<Status[]>(() => read(KEYS.statuses, [])); const [channels, setChannels] = useState<Channel[]>(() => read(KEYS.channels, [])); const [chats, setChats] = useState<Chat[]>(() => read(KEYS.chats, [])); const [newChat, setNewChat] = useState(false); const [chatName, setChatName] = useState(""); const t = text[preferences.language];
   useEffect(() => write(KEYS.preferences, preferences), [preferences]); useEffect(() => write(KEYS.view, view), [view]); useEffect(() => write(KEYS.statuses, statuses), [statuses]); useEffect(() => write(KEYS.channels, channels), [channels]); useEffect(() => write(KEYS.chats, chats), [chats]);
   function addChat(event: FormEvent) { event.preventDefault(); if (!chatName.trim()) return; setChats((items) => [{ id: crypto.randomUUID(), name: chatName.trim() }, ...items]); setChatName(""); setNewChat(false); }
   const nav: { id: View; icon: typeof MessageCircleMore; label: string; ai?: boolean }[] = [{ id: "chats", icon: MessageCircleMore, label: t.chats }, { id: "calls", icon: Phone, label: t.calls }, { id: "status", icon: Clock3, label: t.status }, { id: "channels", icon: MessageCircleMore, label: t.channels }, { id: "communities", icon: UsersRound, label: t.communities }, { id: "ai", icon: Sparkles, label: t.ai, ai: true }, { id: "camera", icon: Camera, label: t.camera }, { id: "profile", icon: CircleUserRound, label: t.profile }];
@@ -139,6 +153,8 @@ function Workspace({ username, logout }: { username: string; logout: () => void 
 export default function Home() {
   const [preferences, setPreferences] = useState(() => read(KEYS.preferences, { language: "ru" as Lang, volume: 70, notifications: true })); const [session, setSession] = useState<string | null>(() => read<string | null>(KEYS.session, null));
   useEffect(() => write(KEYS.preferences, preferences), [preferences]);
+  const previewAi = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "ai";
+  if (!session && previewAi) return <Workspace username="preview" initialView="ai" logout={() => undefined} />;
   if (!session) return <AuthScreen language={preferences.language} setLanguage={(language) => setPreferences({ ...preferences, language })} onAuthenticated={setSession} />;
   return <Workspace username={session} logout={() => { localStorage.removeItem(KEYS.session); setSession(null); }} />;
 }
