@@ -154,6 +154,10 @@ const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(
 
 export default defineConfig({
   plugins,
+  // GitHub Pages serves this repository below /ldoug-messenger/ rather than
+  // at a domain root. Other hosts, including the existing Manus and Vercel
+  // deployments, continue to use root-relative assets.
+  base: process.env.GITHUB_ACTIONS === "true" ? "/ldoug-messenger/" : "/",
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),
